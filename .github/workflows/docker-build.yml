@@ -54,6 +54,7 @@ jobs:
           type=raw,value=latest,enable={{is_default_branch}}
           type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
           type=schedule,pattern={{date 'YYYYMMDD'}}
+          type=raw,value=weekly,enable=${{ github.event_name == 'schedule' }}
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
