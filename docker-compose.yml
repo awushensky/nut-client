@@ -1,0 +1,44 @@
+services:
+
+  # Your NUT Server
+  nut-server:
+    image: instantlinux/nut-upsd:latest
+    container_name: nut-server
+    restart: unless-stopped
+    environment:
+      NAME: ups                         # UPS name
+      SERIAL: YOUR_UPS_SERIAL_HERE      # Your UPS serial number
+      API_USER: ${NUT_UPS_USER}         # Username for API access
+      API_PASSWORD: ${NUT_UPS_PASSWORD} # Password for API access
+      DRIVER: usbhid-ups                # UPS driver (optional, default is usbhid-ups)
+    ports:
+      - "3493:3493"
+    privileged: true
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    networks:
+      - nut
+
+  # UPS Monitor (deploy this on client machines)
+  ups-monitor:
+    image: awushensky/nut-client:latest
+    container_name: ups-monitor
+    restart: unless-stopped
+    environment:
+      UPS_SERVER: nut-server            # or IP address like 192.168.1.100
+      UPS_PORT: 3493
+      UPS_NAME: ups                     # Must match NAME from nut-server
+      CHECK_INTERVAL: 30
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+    privileged: true
+    pid: host
+    network_mode: host
+    # Only use depends_on if running on same machine as NUT server
+    depends_on:
+      - nut-server
+
+networks:
+  nut:
+    driver: bridge
