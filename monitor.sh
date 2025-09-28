@@ -28,11 +28,15 @@ else
         echo "ℹ Host init process: $INIT_PROCESS"
     fi
     
-    # Test systemctl availability (best alternative)
+    # Test systemctl availability (best alternative for systemd systems)
     if command -v systemctl >/dev/null 2>&1; then
         echo "ℹ systemctl available - will use systemd method"
         SHUTDOWN_METHOD="systemctl"
-    # Test sysrq availability (second best)
+    # For systemd systems without systemctl command, use systemd-specific signaling
+    elif [[ "$INIT_PROCESS" == "systemd" ]]; then
+        echo "ℹ systemd detected - will use systemd signaling method"
+        SHUTDOWN_METHOD="systemd_signal"
+    # Test sysrq availability (kernel method)
     elif [ -w /proc/sys/kernel/sysrq ]; then
         echo "ℹ sysrq available - will use kernel method"
         SHUTDOWN_METHOD="sysrq"
@@ -45,12 +49,9 @@ else
     echo "✓ Alternative shutdown method available: $SHUTDOWN_METHOD"
 fi
 
-# Test Docker socket access
-if [ -w /var/run/docker.sock ]; then
-    echo "✓ Docker socket access confirmed"
-else
-    echo "✗ Cannot access Docker socket - container cleanup may not work"
-fi
+echo "Summary:"
+echo "  Shutdown method: $SHUTDOWN_METHOD"
+echo "  Host init: $([ -r /proc/1/comm ] && cat /proc/1/comm 2>/dev/null || echo "Unknown")"
 
 # Test initial connection
 echo "Testing initial UPS connection..."
@@ -79,17 +80,10 @@ while true; do
     # OB = On Battery, LB = Low Battery
     if [[ "$STATUS" == *"OB"* ]] && [[ "$STATUS" == *"LB"* ]]; then
         echo "$(date): CRITICAL - UPS is on battery and low battery detected!"
-        echo "$(date): Initiating emergency shutdown sequence..."
+        echo "$(date): Initiating emergency host shutdown..."
         
         # Optional: Send notification before shutdown
         # curl -X POST "your-webhook-url" -d "UPS Critical: $(hostname) shutting down" || true
-        
-        # Stop all Docker containers gracefully first
-        echo "$(date): Stopping all Docker containers..."
-        docker stop $(docker ps -q) 2>/dev/null || true
-        
-        # Wait for containers to stop
-        sleep 10
         
         # Shutdown the HOST system using the best available method
         echo "$(date): Shutting down HOST system using method: $SHUTDOWN_METHOD"
@@ -100,6 +94,11 @@ while true; do
                 ;;
             "systemctl")
                 systemctl poweroff
+                ;;
+            "systemd_signal")
+                # Send SIGRTMIN+3 to systemd for controlled shutdown
+                echo "$(date): Sending systemd shutdown signal..."
+                kill -RTMIN+3 1 2>/dev/null || kill -TERM 1 2>/dev/null || true
                 ;;
             "sysrq")
                 echo 1 > /proc/sys/kernel/sysrq 2>/dev/null || true
@@ -114,8 +113,10 @@ while true; do
                 ;;
         esac
         
-        # If we get here, something went wrong
-        echo "$(date): ERROR: All shutdown attempts failed!"
+        # If we get here, shutdown may have failed
+        echo "$(date): WARNING: Host shutdown command executed - waiting for system halt..."
+        sleep 30
+        echo "$(date): ERROR: Host shutdown may have failed!"
         exit 1
     fi
     

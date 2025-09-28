@@ -6,11 +6,8 @@ RUN apk add --no-cache \
     curl \
     nut \
     util-linux \
+    docker-cli \
     && rm -rf /var/cache/apk/*
-
-# Create non-root user for security
-RUN addgroup -g 1000 monitor && \
-    adduser -D -u 1000 -G monitor monitor
 
 # Copy the monitoring script
 COPY monitor.sh /usr/local/bin/monitor.sh
@@ -34,5 +31,5 @@ ENV UPS_SERVER=localhost \
     CHECK_INTERVAL=30
 
 # Note: This container requires privileged mode and pid=host to function
-USER monitor
+# Run as root for necessary system access
 CMD ["/usr/local/bin/monitor.sh"]

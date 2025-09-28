@@ -30,11 +30,11 @@ services:
       UPS_NAME: ups                     # Must match NAME from nut-server
       CHECK_INTERVAL: 30
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - /proc:/host/proc:ro
     privileged: true
     pid: host
-    network_mode: host
+    networks:
+      - nut
     # Only use depends_on if running on same machine as NUT server
     depends_on:
       - nut-server

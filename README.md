@@ -35,11 +35,9 @@ services:
       UPS_NAME: ups
       CHECK_INTERVAL: 30
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - /proc:/host/proc:ro
     privileged: true
     pid: host
-    network_mode: host
 ```
 
 ## Configuration
@@ -64,10 +62,35 @@ If your NUT server requires authentication even for read access, you may need to
 
 ### Required Docker Settings
 
-- `privileged: true` - Required for host shutdown capability
-- `pid: host` - Required for accessing host processes
-- `network_mode: host` - Recommended for network access
-- `/var/run/docker.sock` volume - Required to stop containers before shutdown
+- `privileged: true` - Required for host shutdown capability via nsenter/signaling
+- `pid: host` - **Required** for accessing host's init process (PID 1)
+
+> **Why `pid: host`?** The container uses various methods to execute shutdown commands on the host. Without `pid: host`, PID 1 refers to the container's init process, not the host's, making host shutdown impossible.
+
+> **Shutdown Methods:** The container automatically detects the best available shutdown method:
+> - `nsenter` - Direct host namespace access (most reliable)
+> - `systemd_signal` - Systemd-specific signals when systemd is detected
+> - `systemctl` - If systemctl command is available in container
+> - `sysrq` - Kernel SysRq trigger (if writable)
+> - `signal` - Direct init process signaling (fallback)
+
+> **Container Management:** Docker containers are automatically stopped during host shutdown by the init system (systemd/etc.) - no manual container management needed.
+
+### Network Configuration
+
+The container uses **default bridge networking** by default, which is more secure than host networking. The container only needs to connect to your NUT server on port 3493.
+
+**When you might need `network_mode: host`:**
+- NUT server runs on the same host and only listens on localhost
+- Complex networking setup requires host network access
+
+**To use host networking (less secure):**
+```yaml
+services:
+  ups-monitor:
+    # ... other config
+    network_mode: host
+```
 
 ## NUT Server Setup
 
@@ -82,7 +105,7 @@ services:
     container_name: nut-server
     restart: unless-stopped
     environment:
-      NAME: "ups"                       # UPS name (what clients connect to)
+      NAME: "servers"                    # UPS name (what clients connect to)
       SERIAL: YOUR_UPS_SERIAL_HERE      # Your UPS serial number  
       API_USER: ${NUT_UPS_USER}         # Username for API access
       API_PASSWORD: ${NUT_UPS_PASSWORD} # Password for API access
