@@ -74,24 +74,6 @@ If your NUT server requires authentication even for read access, you may need to
 > - `sysrq` - Kernel SysRq trigger (if writable)
 > - `signal` - Direct init process signaling (fallback)
 
-> **Container Management:** Docker containers are automatically stopped during host shutdown by the init system (systemd/etc.) - no manual container management needed.
-
-### Network Configuration
-
-The container uses **default bridge networking** by default, which is more secure than host networking. The container only needs to connect to your NUT server on port 3493.
-
-**When you might need `network_mode: host`:**
-- NUT server runs on the same host and only listens on localhost
-- Complex networking setup requires host network access
-
-**To use host networking (less secure):**
-```yaml
-services:
-  ups-monitor:
-    # ... other config
-    network_mode: host
-```
-
 ## NUT Server Setup
 
 The `instantlinux/nut-upsd` container is configured entirely through environment variables - no config files needed!
@@ -105,7 +87,7 @@ services:
     container_name: nut-server
     restart: unless-stopped
     environment:
-      NAME: "servers"                    # UPS name (what clients connect to)
+      NAME: "servers"                   # UPS name (what clients connect to)
       SERIAL: YOUR_UPS_SERIAL_HERE      # Your UPS serial number  
       API_USER: ${NUT_UPS_USER}         # Username for API access
       API_PASSWORD: ${NUT_UPS_PASSWORD} # Password for API access
@@ -116,16 +98,6 @@ services:
     devices:
       - /dev/bus/usb:/dev/bus/usb
 ```
-
-### Environment Variables (.env file)
-
-```bash
-# .env file
-NUT_UPS_USER=admin
-NUT_UPS_PASSWORD=your_secure_password
-```
-
-> **Note**: The container automatically configures all NUT settings based on these environment variables. The `API_USER` and `API_PASSWORD` are used for administrative access to the NUT server, but standard read-only queries (like this monitor uses) typically don't require authentication in NUT.
 
 ## How It Works
 
@@ -144,13 +116,6 @@ The monitor looks for these UPS status combinations:
 - `OB` - On Battery (power outage)
 - `LB` - Low Battery (critical - triggers shutdown)
 - `OB LB` - On Battery + Low Battery (immediate shutdown)
-
-## Safety Features
-
-- **Test Mode**: Container tests host shutdown capability on startup
-- **Graceful Shutdown**: Stops all containers before host shutdown
-- **Multiple Fallbacks**: Uses multiple shutdown methods if primary fails
-- **Connection Monitoring**: Warns if unable to connect to UPS server
 
 ## Logs
 
