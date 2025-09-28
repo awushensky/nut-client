@@ -15,6 +15,11 @@ on:
         description: 'Custom tag for the build'
         required: false
         default: 'manual'
+      create_weekly:
+        description: 'Also create weekly tag'
+        required: false
+        default: 'false'
+        type: boolean
 
 env:
   REGISTRY: docker.io
@@ -55,6 +60,8 @@ jobs:
           type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
           type=schedule,pattern={{date 'YYYYMMDD'}}
           type=raw,value=weekly,enable=${{ github.event_name == 'schedule' }}
+          type=raw,value={{date 'YYYYMMDD'}},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.create_weekly == 'true' }}
+          type=raw,value=weekly,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.create_weekly == 'true' }}
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
