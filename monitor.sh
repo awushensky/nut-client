@@ -4,10 +4,26 @@ UPS_SERVER=${UPS_SERVER:-localhost}
 UPS_PORT=${UPS_PORT:-3493}
 UPS_NAME=${UPS_NAME:-ups}
 CHECK_INTERVAL=${CHECK_INTERVAL:-30}
+BATTERY_LEVEL_SHUTDOWN=${BATTERY_LEVEL_SHUTDOWN:-}
+ON_BATTERY_TIMEOUT=${ON_BATTERY_TIMEOUT:-}
 SHUTDOWN_METHOD=""
+
+# Variables to track UPS state
+ON_BATTERY_START_TIME=""
+LAST_STATUS=""
 
 echo "Starting UPS monitor for ${UPS_NAME}@${UPS_SERVER}:${UPS_PORT}"
 echo "Checking every ${CHECK_INTERVAL} seconds"
+if [[ -n "$BATTERY_LEVEL_SHUTDOWN" ]]; then
+    echo "Battery level shutdown threshold: ${BATTERY_LEVEL_SHUTDOWN}%"
+else
+    echo "Battery level shutdown: DISABLED"
+fi
+if [[ -n "$ON_BATTERY_TIMEOUT" ]]; then
+    echo "On-battery timeout: ${ON_BATTERY_TIMEOUT} seconds"
+else
+    echo "On-battery timeout: DISABLED"
+fi
 
 # Note: upsc typically doesn't require authentication for read-only access
 # Authentication is mainly for administrative commands (upscmd, upsrw)
@@ -76,11 +92,46 @@ while true; do
         continue
     fi
     
-    # Check for critical conditions:
-    # OB = On Battery, LB = Low Battery
-    if [[ "$STATUS" == *"OB"* ]] && [[ "$STATUS" == *"LB"* ]]; then
-        echo "$(date): CRITICAL - UPS is on battery and low battery detected!"
-        echo "$(date): Initiating emergency host shutdown..."
+    # Track when UPS goes on battery
+    if [[ "$STATUS" == *"OB"* ]] && [[ "$LAST_STATUS" != *"OB"* ]]; then
+        ON_BATTERY_START_TIME=$(date +%s)
+        echo "$(date): UPS switched to battery power - starting timer"
+    elif [[ "$STATUS" != *"OB"* ]] && [[ "$LAST_STATUS" == *"OB"* ]]; then
+        ON_BATTERY_START_TIME=""
+        echo "$(date): UPS restored to mains power - timer reset"
+    fi
+    
+    # Update last status for next iteration
+    LAST_STATUS="$STATUS"
+    
+    # Check for shutdown conditions
+    SHUTDOWN_REASON=""
+    
+    if [[ "$STATUS" == *"OB"* ]]; then
+        # 1. Critical emergency: On Battery + Low Battery (original condition)
+        if [[ "$STATUS" == *"LB"* ]]; then
+            SHUTDOWN_REASON="EMERGENCY: UPS on battery with low battery warning"
+        
+        # 2. Battery level threshold (only if enabled)
+        elif [[ -n "$BATTERY_LEVEL_SHUTDOWN" ]] && [[ "$BATTERY" =~ ^[0-9]+$ ]] && [[ "$BATTERY" -le "$BATTERY_LEVEL_SHUTDOWN" ]]; then
+            SHUTDOWN_REASON="Battery level ($BATTERY%) at or below threshold ($BATTERY_LEVEL_SHUTDOWN%)"
+        
+        # 3. On-battery timeout (only if enabled)
+        elif [[ -n "$ON_BATTERY_TIMEOUT" ]] && [[ -n "$ON_BATTERY_START_TIME" ]]; then
+            CURRENT_TIME=$(date +%s)
+            ON_BATTERY_DURATION=$((CURRENT_TIME - ON_BATTERY_START_TIME))
+            
+            if [[ "$ON_BATTERY_DURATION" -ge "$ON_BATTERY_TIMEOUT" ]]; then
+                SHUTDOWN_REASON="On-battery timeout reached (${ON_BATTERY_DURATION}s >= ${ON_BATTERY_TIMEOUT}s)"
+            else
+                echo "$(date): On battery for ${ON_BATTERY_DURATION}s (timeout: ${ON_BATTERY_TIMEOUT}s)"
+            fi
+        fi
+    fi
+    # Execute shutdown if any condition is met
+    if [[ -n "$SHUTDOWN_REASON" ]]; then
+        echo "$(date): SHUTDOWN TRIGGERED - $SHUTDOWN_REASON"
+        echo "$(date): Initiating host shutdown..."
         
         # Optional: Send notification before shutdown
         # curl -X POST "your-webhook-url" -d "UPS Critical: $(hostname) shutting down" || true

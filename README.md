@@ -34,6 +34,8 @@ services:
       UPS_PORT: 3493
       UPS_NAME: ups
       CHECK_INTERVAL: 30
+      BATTERY_LEVEL_SHUTDOWN: 20  # Optional, threshold in % for battery level shutdown if ups runs on battery
+      ON_BATTERY_TIMEOUT: 300 # Optional, timeout in s for shutdown after change to on battery
     volumes:
       - /proc:/host/proc:ro
     privileged: true
@@ -50,6 +52,8 @@ services:
 | `UPS_PORT` | `3493` | Port of your NUT server |
 | `UPS_NAME` | `ups` | Name of the UPS as configured in NUT |
 | `CHECK_INTERVAL` | `30` | How often to check UPS status (seconds) |
+| `BATTERY_LEVEL_SHUTDOWN` | | Battery level threshold for shutdown if ups runs on battery (percent, optional) |
+| `ON_BATTERY_TIMEOUT` | | Timeout for shutdown after change to on battery (seconds, optional) |
 
 ### Authentication Notes
 
@@ -103,7 +107,8 @@ services:
 
 1. **Monitoring**: Container continuously polls the NUT server for UPS status
 2. **Detection**: Watches for `OB` (On Battery) + `LB` (Low Battery) conditions
-3. **Shutdown Sequence**:
+3. **Optinal Detection**: Watches for `OB` (On Battery) and a certain timeout or a battery trashhold
+4. **Shutdown Sequence**:
    - Logs critical condition
    - Stops all Docker containers gracefully
    - Waits 10 seconds for cleanup
